@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  led-router:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: led-router-app
+    container_name: led-router-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
