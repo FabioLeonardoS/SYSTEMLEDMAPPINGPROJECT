@@ -23,7 +23,7 @@ NODE_ENV=production
 
 3. Suba o container:
 ```bash
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 O Next.js irá baixar as dependências, buildar o projeto localmente dentro do container multi-stage e iniciar a aplicação.
