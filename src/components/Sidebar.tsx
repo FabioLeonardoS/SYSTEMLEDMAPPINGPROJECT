@@ -6,6 +6,7 @@ import { fetchPanelInventory, PanelModel } from '@/lib/api';
 import { PanelInstance } from '@/types';
 import { Settings, Download, Monitor, Grid as GridIcon, AlertTriangle, Zap, Activity, Maximize, Weight, Ruler, Cpu } from 'lucide-react';
 import clsx from 'clsx';
+import { calculateSendCards, SendCardModel } from '@/lib/sendcardCalculator';
 
 export default function Sidebar({ onExportPDF }: { onExportPDF: () => void }) {
   const { 
@@ -115,6 +116,12 @@ export default function Sidebar({ onExportPDF }: { onExportPDF: () => void }) {
   }
   
   const isOver8K = totalWidthPx > 8192 || totalHeightPx > 8192;
+
+  let sendCardModelToUse: SendCardModel = 'H-20xRJ45';
+  if (routeOptions.processorConfig?.sendCardPorts === 16) sendCardModelToUse = 'H-16XRj45';
+  else if (routeOptions.processorConfig?.sendCardPorts === 32) sendCardModelToUse = 'H-32_Standard';
+  
+  const sendCardCalc = totalWidthPx > 0 ? calculateSendCards(totalWidthPx, totalHeightPx, sendCardModelToUse, 8) : null;
 
   const generateUniformGrid = () => {
     if (!selectedModel) return;
@@ -455,6 +462,14 @@ export default function Sidebar({ onExportPDF }: { onExportPDF: () => void }) {
             <div className={`font-semibold text-sm ${isOver8K ? 'text-red-400' : ''}`}>{totalWidthPx} x {totalHeightPx} px</div>
             {routingResult && <div className="text-xs text-green-400 mt-1">{routingResult.totalPorts} Porta(s) Usadas</div>}
           </div>
+
+          {sendCardCalc && (
+            <div className="bg-gray-800 p-3 rounded border border-gray-700">
+              <div className="text-gray-500 text-xs flex items-center gap-1 mb-1"><Cpu size={12}/> Placas de Envio</div>
+              <div className="font-semibold text-sm text-blue-400">{sendCardCalc.cardsNeeded}x {sendCardCalc.modelName.split(' ')[0]}</div>
+              <div className="text-xs text-gray-400 mt-1">{sendCardCalc.portsNeeded} Porta(s) Limite</div>
+            </div>
+          )}
           
           <div className="bg-gray-800 p-3 rounded border border-gray-700">
             <div className="text-gray-500 text-xs flex items-center gap-1 mb-1"><GridIcon size={12}/> Dimensões</div>
