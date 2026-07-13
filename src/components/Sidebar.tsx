@@ -27,6 +27,7 @@ export default function Sidebar({ onExportPDF, onExportPNG }: { onExportPDF: () 
   const [widthMeters, setWidthMeters] = useState(3);
   const [heightMeters, setHeightMeters] = useState(2);
   const [selectedPitch, setSelectedPitch] = useState<string>('');
+  const [assemblyStrategy, setAssemblyStrategy] = useState<'mix' | '500' | '1000'>('mix');
 
   useEffect(() => {
     async function loadInventory() {
@@ -117,33 +118,60 @@ export default function Sidebar({ onExportPDF, onExportPNG }: { onExportPDF: () 
     const colsCount = Math.round(widthMeters / 0.5);
     const targetHeightMm = heightMeters * 1000;
     
-    const rows1000 = Math.floor(targetHeightMm / 1000);
-    const remainder = targetHeightMm % 1000;
-    const has500Row = remainder > 0; 
-
     const newPanels: PanelInstance[] = [];
     let currentY = 0;
     
-    // Build rows 1000mm
-    for (let r = 0; r < rows1000; r++) {
-      for (let c = 0; c < colsCount; c++) {
-        newPanels.push({
-          id: `panel-1000-${r}-${c}-${Date.now()}`,
-          model: model1000,
-          position: { x: c * (model1000.larguraMm / 5), y: currentY }
-        });
+    if (assemblyStrategy === '500') {
+      const rows500 = Math.round(targetHeightMm / 500);
+      for (let r = 0; r < rows500; r++) {
+        for (let c = 0; c < colsCount; c++) {
+          newPanels.push({
+            id: `panel-500-${r}-${c}-${Date.now()}`,
+            model: model500,
+            position: { x: c * (model500.larguraMm / 5), y: currentY }
+          });
+        }
+        currentY += (model500.alturaMm / 5);
       }
-      currentY += (model1000.alturaMm / 5);
-    }
+    } else if (assemblyStrategy === '1000') {
+      const rows1000 = Math.round(targetHeightMm / 1000);
+      for (let r = 0; r < rows1000; r++) {
+        for (let c = 0; c < colsCount; c++) {
+          newPanels.push({
+            id: `panel-1000-${r}-${c}-${Date.now()}`,
+            model: model1000,
+            position: { x: c * (model1000.larguraMm / 5), y: currentY }
+          });
+        }
+        currentY += (model1000.alturaMm / 5);
+      }
+    } else {
+      // MIX logic
+      const rows1000 = Math.floor(targetHeightMm / 1000);
+      const remainder = targetHeightMm % 1000;
+      const has500Row = remainder > 0; 
 
-    // Add bottom row of 500mm if needed
-    if (has500Row) {
-      for (let c = 0; c < colsCount; c++) {
-        newPanels.push({
-          id: `panel-500-${c}-${Date.now()}`,
-          model: model500,
-          position: { x: c * (model500.larguraMm / 5), y: currentY }
-        });
+      // Build rows 1000mm
+      for (let r = 0; r < rows1000; r++) {
+        for (let c = 0; c < colsCount; c++) {
+          newPanels.push({
+            id: `panel-1000-${r}-${c}-${Date.now()}`,
+            model: model1000,
+            position: { x: c * (model1000.larguraMm / 5), y: currentY }
+          });
+        }
+        currentY += (model1000.alturaMm / 5);
+      }
+
+      // Add bottom row of 500mm if needed
+      if (has500Row) {
+        for (let c = 0; c < colsCount; c++) {
+          newPanels.push({
+            id: `panel-500-${c}-${Date.now()}`,
+            model: model500,
+            position: { x: c * (model500.larguraMm / 5), y: currentY }
+          });
+        }
       }
     }
     
@@ -213,7 +241,21 @@ export default function Sidebar({ onExportPDF, onExportPNG }: { onExportPDF: () 
       <div className="bg-gray-800 p-4 rounded-lg border border-gray-700 space-y-4">
         {generationMode === 'smart' ? (
           <>
-            <div className="text-gray-300 text-sm mb-2">Geração Inteligente (Mescla 500x500 e 500x1000)</div>
+            <div className="text-gray-300 text-sm mb-2">Geração Inteligente (Metragem)</div>
+            
+            <div>
+              <label className="text-xs text-gray-400">Estratégia de Montagem</label>
+              <select 
+                className="w-full bg-gray-900 border border-gray-700 rounded-md p-1.5 mt-1 text-white text-xs"
+                value={assemblyStrategy}
+                onChange={(e) => setAssemblyStrategy(e.target.value as 'mix'|'500'|'1000')}
+              >
+                <option value="mix">Mesclar 500x1000 e 500x500 (Otimizado)</option>
+                <option value="500">Usar APENAS 500x500</option>
+                <option value="1000">Usar APENAS 500x1000</option>
+              </select>
+            </div>
+
             <div className="flex gap-4">
               <div className="flex-1">
                 <label className="text-xs text-gray-400">Largura (metros)</label>
