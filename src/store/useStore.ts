@@ -46,6 +46,10 @@ export const useStore = create<AppState>((set, get) => ({
     startPoint: 'bottom-left',
     portLimit: 655360,
     redundancy: false,
+    processorConfig: {
+      controller: 'H2',
+      sendCardPorts: 20
+    }
   },
   setRouteOptions: (options) => set((state) => ({
     routeOptions: { ...state.routeOptions, ...options },

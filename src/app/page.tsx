@@ -4,7 +4,7 @@ import React, { useRef } from 'react';
 import dynamic from 'next/dynamic';
 import Sidebar from '@/components/Sidebar';
 import { useStore } from '@/store/useStore';
-import { exportCanvasToPNG, exportProjectToPDF } from '@/lib/pdfGenerator';
+import { exportProjectToPDF } from '@/lib/pdfGenerator';
 
 // Dynamically import the CanvasArea to avoid SSR issues with Konva (window is not defined on server)
 const CanvasArea = dynamic(() => import('@/components/CanvasArea'), { 
@@ -14,19 +14,16 @@ const CanvasArea = dynamic(() => import('@/components/CanvasArea'), {
 
 export default function Home() {
   const stageRef = useRef(null);
-  const { panels, routingResult } = useStore();
+  const { panels, routingResult, routeOptions } = useStore();
 
-  const handleExportPNG = () => {
-    exportCanvasToPNG(stageRef);
-  };
 
   const handleExportPDF = () => {
-    exportProjectToPDF(stageRef, panels, routingResult);
+    exportProjectToPDF(stageRef, panels, routingResult, routeOptions);
   };
 
   return (
     <main className="flex h-screen w-full bg-black overflow-hidden font-sans">
-      <Sidebar onExportPDF={handleExportPDF} onExportPNG={handleExportPNG} />
+      <Sidebar onExportPDF={handleExportPDF} />
       <CanvasArea stageRef={stageRef} />
     </main>
   );

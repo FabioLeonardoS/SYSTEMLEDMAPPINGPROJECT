@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Stage, Layer, Rect, Text, Line, Group } from 'react-konva';
+import { Stage, Layer, Rect, Text, Line, Arrow, Group } from 'react-konva';
 import { useStore } from '@/store/useStore';
 import { PanelInstance } from '@/types';
 
@@ -22,6 +22,8 @@ const PORT_COLORS = [
 export default function CanvasArea({ stageRef }: { stageRef: React.RefObject<any> }) {
   const { panels, updatePanelPosition, routingResult, selectedModel } = useStore();
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
+  const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
+  const [stageScale, setStageScale] = useState({ x: 1, y: 1 });
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -39,6 +41,46 @@ export default function CanvasArea({ stageRef }: { stageRef: React.RefObject<any
     return () => window.removeEventListener('resize', checkSize);
   }, []);
 
+  useEffect(() => {
+    // Zoom to fit logic
+    if (panels.length === 0 || stageSize.width === 0) return;
+    
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    
+    panels.forEach(p => {
+      const pxLeft = p.position.x;
+      const pxRight = p.position.x + (p.model.larguraMm / 5);
+      const pxTop = p.position.y;
+      const pxBottom = p.position.y + (p.model.alturaMm / 5);
+      if (pxLeft < minX) minX = pxLeft;
+      if (pxRight > maxX) maxX = pxRight;
+      if (pxTop < minY) minY = pxTop;
+      if (pxBottom > maxY) maxY = pxBottom;
+    });
+
+    const padding = 50;
+    const bboxWidth = maxX - minX;
+    const bboxHeight = maxY - minY;
+
+    if (bboxWidth > 0 && bboxHeight > 0) {
+      const scaleX = (stageSize.width - padding * 2) / bboxWidth;
+      const scaleY = (stageSize.height - padding * 2) / bboxHeight;
+      const scale = Math.min(scaleX, scaleY, 2); // max zoom 2x
+      
+      setStageScale({ x: scale, y: scale });
+      setStagePos({
+        x: (stageSize.width - bboxWidth * scale) / 2 - minX * scale,
+        y: (stageSize.height - bboxHeight * scale) / 2 - minY * scale
+      });
+    } else {
+      setStageScale({ x: 1, y: 1 });
+      setStagePos({ x: 0, y: 0 });
+    }
+  }, [panels, stageSize]);
+
   const handleDragEnd = (e: any, id: string) => {
     // Grid snapping (BLOCK_SIZE)
     const x = Math.round(e.target.x() / BLOCK_SIZE) * BLOCK_SIZE;
@@ -51,7 +93,41 @@ export default function CanvasArea({ stageRef }: { stageRef: React.RefObject<any
 
   return (
     <div className="flex-1 bg-gray-950 overflow-hidden relative" ref={containerRef}>
-      <Stage width={stageSize.width} height={stageSize.height} ref={stageRef} draggable>
+      <Stage 
+        width={stageSize.width} 
+        height={stageSize.height} 
+        ref={stageRef} 
+        draggable
+        x={stagePos.x}
+        y={stagePos.y}
+        scale={stageScale}
+        onDragEnd={(e) => {
+          if (e.target === e.target.getStage()) {
+            setStagePos({ x: e.target.x(), y: e.target.y() });
+          }
+        }}
+        onWheel={(e) => {
+          e.evt.preventDefault();
+          const stage = e.target.getStage();
+          if (!stage) return;
+          const oldScale = stage.scaleX();
+          const pointer = stage.getPointerPosition();
+          if (!pointer) return;
+
+          const mousePointTo = {
+            x: (pointer.x - stage.x()) / oldScale,
+            y: (pointer.y - stage.y()) / oldScale,
+          };
+
+          const newScale = e.evt.deltaY < 0 ? oldScale * 1.1 : oldScale / 1.1;
+          
+          setStageScale({ x: newScale, y: newScale });
+          setStagePos({
+            x: pointer.x - mousePointTo.x * newScale,
+            y: pointer.y - mousePointTo.y * newScale,
+          });
+        }}
+      >
         <Layer>
           {/* Grid lines (optional visual aid) */}
           {Array.from({ length: Math.ceil(stageSize.width / BLOCK_SIZE) * 2 }).map((_, i) => (
@@ -139,15 +215,21 @@ export default function CanvasArea({ stageRef }: { stageRef: React.RefObject<any
             ];
 
             return (
-              <Line
+              <Arrow
                 key={`route-${idx}`}
                 points={points}
                 stroke={portColor}
-                strokeWidth={4}
+                fill={portColor}
+                strokeWidth={6}
+                pointerLength={10}
+                pointerWidth={10}
                 lineJoin="round"
                 lineCap="round"
-                dash={[10, 5]}
-                opacity={0.9}
+                opacity={1}
+                shadowColor="black"
+                shadowBlur={3}
+                shadowOpacity={0.8}
+                shadowOffset={{ x: 1, y: 1 }}
               />
             );
           })}
@@ -156,7 +238,7 @@ export default function CanvasArea({ stageRef }: { stageRef: React.RefObject<any
       
       {/* Overlay controls */}
       <div className="absolute top-4 right-4 bg-gray-900/80 backdrop-blur border border-gray-800 p-2 rounded text-xs text-gray-400">
-        <p>Arraste para mover o palco. Role para zoom (em breve).</p>
+        <p>Arraste o fundo para mover o palco. Role o mouse para zoom livre.</p>
         <p>Arraste os painéis para reposicioná-los.</p>
       </div>
     </div>

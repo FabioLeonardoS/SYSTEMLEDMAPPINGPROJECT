@@ -16,11 +16,17 @@ export interface PanelInstance {
 export type RoutingDirection = 'horizontal' | 'vertical';
 export type StartPoint = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
+export interface ProcessorConfig {
+  controller: string;
+  sendCardPorts: number;
+}
+
 export interface RouteOptions {
   direction: RoutingDirection;
   startPoint: StartPoint;
   portLimit: number; // default 655360
   redundancy: boolean;
+  processorConfig: ProcessorConfig;
 }
 
 export interface RoutingResult {

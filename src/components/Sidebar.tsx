@@ -4,10 +4,10 @@ import React, { useEffect, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { fetchPanelInventory, PanelModel } from '@/lib/api';
 import { PanelInstance } from '@/types';
-import { Settings, Download, Monitor, Grid as GridIcon, AlertTriangle, Zap, Activity, Maximize, Weight, Ruler } from 'lucide-react';
+import { Settings, Download, Monitor, Grid as GridIcon, AlertTriangle, Zap, Activity, Maximize, Weight, Ruler, Cpu } from 'lucide-react';
 import clsx from 'clsx';
 
-export default function Sidebar({ onExportPDF, onExportPNG }: { onExportPDF: () => void, onExportPNG: () => void }) {
+export default function Sidebar({ onExportPDF }: { onExportPDF: () => void }) {
   const { 
     inventory, setInventory, 
     selectedModel, setSelectedModel,
@@ -50,6 +50,17 @@ export default function Sidebar({ onExportPDF, onExportPNG }: { onExportPDF: () 
   const totalConsumoMedio = panels.reduce((acc, p) => acc + p.model.consumoMedioW, 0);
   const totalConsumoMaximo = panels.reduce((acc, p) => acc + p.model.consumoMaximoW, 0);
   
+  // Power Cable Calculation (220V * 20A = 4400W)
+  const POWER_LIMIT_WATTS = 4400;
+  let maxPanelsPerCable = 0;
+  let totalCablesNeeded = 0;
+  if (selectedModel && selectedModel.consumoMaximoW > 0) {
+    maxPanelsPerCable = Math.floor(POWER_LIMIT_WATTS / selectedModel.consumoMaximoW);
+    if (panels.length > 0) {
+      totalCablesNeeded = Math.ceil(panels.length / maxPanelsPerCable);
+    }
+  }
+  
   // Calculate total dimensions based on panels physical sizes
   let totalWidthMm = 0;
   let totalHeightMm = 0;
@@ -73,10 +84,37 @@ export default function Sidebar({ onExportPDF, onExportPNG }: { onExportPDF: () 
       if (pxBottom > maxY) maxY = pxBottom;
     });
 
-    // Convert visual pixels back to mm (* 5)
     totalWidthMm = (maxX - minX) * 5;
     totalHeightMm = (maxY - minY) * 5;
   }
+
+  // Calculate resolution based on physical size and pitch (rough estimate based on panels) or exact pixel width/height
+  let totalWidthPx = 0;
+  let totalHeightPx = 0;
+  if (panels.length > 0) {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    
+    panels.forEach(p => {
+      // Logical grid based on pixels
+      const pxLeft = Math.round(p.position.x / (p.model.larguraMm / 5)) * p.model.resolucaoX;
+      const pxRight = pxLeft + p.model.resolucaoX;
+      const pxTop = Math.round(p.position.y / (p.model.alturaMm / 5)) * p.model.resolucaoY;
+      const pxBottom = pxTop + p.model.resolucaoY;
+      
+      if (pxLeft < minX) minX = pxLeft;
+      if (pxRight > maxX) maxX = pxRight;
+      if (pxTop < minY) minY = pxTop;
+      if (pxBottom > maxY) maxY = pxBottom;
+    });
+    
+    totalWidthPx = maxX - minX;
+    totalHeightPx = maxY - minY;
+  }
+  
+  const isOver8K = totalWidthPx > 8192 || totalHeightPx > 8192;
 
   const generateUniformGrid = () => {
     if (!selectedModel) return;
@@ -371,6 +409,42 @@ export default function Sidebar({ onExportPDF, onExportPNG }: { onExportPDF: () 
         )}
       </div>
 
+      {/* Processor & SendCard Config */}
+      <div className="bg-gray-800 p-4 rounded-lg border border-gray-700 space-y-4">
+        <div className="flex items-center gap-2 text-gray-200 font-semibold">
+          <Cpu size={16} className="text-purple-500" />
+          <span>Processamento de Imagem</span>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-gray-400">Controladora</label>
+            <select 
+              className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 mt-1 text-sm text-white"
+              value={routeOptions.processorConfig?.controller || 'H2'}
+              onChange={(e) => setRouteOptions({ processorConfig: { ...routeOptions.processorConfig, controller: e.target.value } })}
+            >
+              <option value="H9">H9</option>
+              <option value="H5">H5</option>
+              <option value="H2">H2</option>
+              <option value="VX1000">VX1000</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-400">Cartão de Envio (Portas)</label>
+            <select 
+              className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 mt-1 text-sm text-white"
+              value={routeOptions.processorConfig?.sendCardPorts || 20}
+              onChange={(e) => setRouteOptions({ processorConfig: { ...routeOptions.processorConfig, sendCardPorts: parseInt(e.target.value) } })}
+            >
+              <option value={16}>16 Portas</option>
+              <option value={20}>20 Portas</option>
+              <option value={32}>32 Portas (Ótico)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       {/* Dashboard Stats */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Dashboard</h3>
@@ -378,7 +452,7 @@ export default function Sidebar({ onExportPDF, onExportPNG }: { onExportPDF: () 
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-gray-800 p-3 rounded border border-gray-700">
             <div className="text-gray-500 text-xs flex items-center gap-1 mb-1"><Maximize size={12}/> Resolução Total</div>
-            <div className="font-semibold text-sm">{totalPixels.toLocaleString()} px</div>
+            <div className={`font-semibold text-sm ${isOver8K ? 'text-red-400' : ''}`}>{totalWidthPx} x {totalHeightPx} px</div>
             {routingResult && <div className="text-xs text-green-400 mt-1">{routingResult.totalPorts} Porta(s) Usadas</div>}
           </div>
           
@@ -400,15 +474,36 @@ export default function Sidebar({ onExportPDF, onExportPNG }: { onExportPDF: () 
             <div className="text-xs text-gray-400 mt-1">{totalConsumoMedio} W (Médio)</div>
           </div>
         </div>
+
+        {panels.length > 0 && maxPanelsPerCable > 0 && (
+          <div className="bg-gray-800 p-3 rounded border border-gray-700">
+            <div className="text-gray-400 text-xs mb-1 font-semibold flex items-center gap-1">
+              <Zap size={12} className="text-yellow-500"/> Dimensionamento de Energia (220V / 20A)
+            </div>
+            <div className="text-sm">
+              Máximo por cabo (PP 3x2,5mm²): <strong className="text-white">{maxPanelsPerCable} placas</strong>
+            </div>
+            <div className="text-xs text-gray-400 mt-1">
+              Total de linhas necessárias: <strong className="text-white">{totalCablesNeeded} linhas</strong>
+            </div>
+          </div>
+        )}
+        
+        {isOver8K && (
+          <div className="text-xs text-red-500 bg-red-500/10 p-3 rounded mt-2 border border-red-500/30 flex gap-2 items-start">
+            <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+            <div>
+              <strong>Atenção: Limite 8K Excedido!</strong>
+              <p className="mt-1 text-gray-400">A resolução do projeto excede 8192px em uma ou ambas as dimensões. Você precisará dividir o projeto em múltiplos processadores ou reduzir a resolução lógica no sistema de envio.</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Export Actions */}
       <div className="mt-auto space-y-2 pt-4 border-t border-gray-800">
         <button onClick={onExportPDF} className="w-full flex items-center justify-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/50 py-2 rounded transition-colors text-sm font-medium">
-          <Download size={16} /> Exportar PDF
-        </button>
-        <button onClick={onExportPNG} className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-600 py-2 rounded transition-colors text-sm font-medium">
-          <Download size={16} /> Exportar Mapa PNG
+          <Download size={16} /> Exportar Relatório PDF
         </button>
       </div>
     </div>
