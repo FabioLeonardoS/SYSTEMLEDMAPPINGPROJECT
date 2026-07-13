@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { fetchPanelInventory, PanelModel } from '@/lib/api';
 import { PanelInstance } from '@/types';
-import { Settings, Download, Monitor, Grid as GridIcon, AlertTriangle, Zap, Activity, Maximize, Weight } from 'lucide-react';
+import { Settings, Download, Monitor, Grid as GridIcon, AlertTriangle, Zap, Activity, Maximize, Weight, Ruler } from 'lucide-react';
 import clsx from 'clsx';
 
 export default function Sidebar({ onExportPDF, onExportPNG }: { onExportPDF: () => void, onExportPNG: () => void }) {
@@ -22,17 +22,26 @@ export default function Sidebar({ onExportPDF, onExportPNG }: { onExportPDF: () 
   const [showOverrideWarning, setShowOverrideWarning] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  // New states for Smart Generation
+  const [generationMode, setGenerationMode] = useState<'smart' | 'uniform'>('smart');
+  const [widthMeters, setWidthMeters] = useState(3);
+  const [heightMeters, setHeightMeters] = useState(2);
+  const [selectedPitch, setSelectedPitch] = useState<string>('');
+
   useEffect(() => {
     async function loadInventory() {
       const data = await fetchPanelInventory();
       setInventory(data);
       if (data.length > 0) {
         setSelectedModel(data[0]);
+        setSelectedPitch(data[0].modelo);
       }
       setIsLoading(false);
     }
     loadInventory();
   }, [setInventory, setSelectedModel]);
+
+  const uniquePitches = Array.from(new Set(inventory.map(i => i.modelo)));
 
   // Derived Dashboard Stats
   const totalPixels = panels.reduce((acc, p) => acc + (p.model.resolucaoX * p.model.resolucaoY), 0);
@@ -40,36 +49,104 @@ export default function Sidebar({ onExportPDF, onExportPNG }: { onExportPDF: () 
   const totalConsumoMedio = panels.reduce((acc, p) => acc + p.model.consumoMedioW, 0);
   const totalConsumoMaximo = panels.reduce((acc, p) => acc + p.model.consumoMaximoW, 0);
   
-  // Calculate total dimensions based on bounding box
+  // Calculate total dimensions based on panels physical sizes
   let totalWidthMm = 0;
   let totalHeightMm = 0;
   if (panels.length > 0) {
-    const minX = Math.min(...panels.map(p => p.position.x));
-    const maxX = Math.max(...panels.map(p => p.position.x));
-    const minY = Math.min(...panels.map(p => p.position.y));
-    const maxY = Math.max(...panels.map(p => p.position.y));
+    // Each panel's bounding box logic
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
     
-    // Convert canvas coordinates back to grid logical blocks or just use raw values
-    // Here we approximate based on the panel width
-    if (selectedModel) {
-      totalWidthMm = ((maxX - minX) / 100 + 1) * selectedModel.larguraMm;
-      totalHeightMm = ((maxY - minY) / 100 + 1) * selectedModel.alturaMm;
-    }
+    panels.forEach(p => {
+      // position x, y is divided by 5 compared to mm (500mm -> 100px)
+      const pxLeft = p.position.x;
+      const pxRight = p.position.x + (p.model.larguraMm / 5);
+      const pxTop = p.position.y;
+      const pxBottom = p.position.y + (p.model.alturaMm / 5);
+      
+      if (pxLeft < minX) minX = pxLeft;
+      if (pxRight > maxX) maxX = pxRight;
+      if (pxTop < minY) minY = pxTop;
+      if (pxBottom > maxY) maxY = pxBottom;
+    });
+
+    // Convert visual pixels back to mm (* 5)
+    totalWidthMm = (maxX - minX) * 5;
+    totalHeightMm = (maxY - minY) * 5;
   }
 
-  const generateGrid = () => {
+  const generateUniformGrid = () => {
     if (!selectedModel) return;
     
     const newPanels: PanelInstance[] = [];
+    let currentY = 0;
+    
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         newPanels.push({
           id: `panel-${r}-${c}-${Date.now()}`,
           model: selectedModel,
-          position: { x: c * 100, y: r * 100 } // 100 is the visual block size on canvas
+          position: { x: c * (selectedModel.larguraMm / 5), y: currentY }
+        });
+      }
+      currentY += (selectedModel.alturaMm / 5);
+    }
+    setPanels(newPanels);
+  };
+
+  const generateSmartGrid = () => {
+    if (!selectedPitch) return;
+    
+    const modelsOfPitch = inventory.filter(i => i.modelo === selectedPitch);
+    
+    // Find the 500x1000 and 500x500 versions for the selected pitch
+    // Fallback to first available if exactly 1000 or 500 doesn't exist
+    let model1000 = modelsOfPitch.find(m => m.alturaMm === 1000 && m.larguraMm === 500);
+    let model500 = modelsOfPitch.find(m => m.alturaMm === 500 && m.larguraMm === 500);
+    
+    if (!model1000 && modelsOfPitch.length > 0) model1000 = modelsOfPitch[0];
+    if (!model500 && modelsOfPitch.length > 0) model500 = modelsOfPitch[0];
+    
+    if (!model1000 || !model500) return;
+
+    // Use selectedModel to keep store happy for other components, though we use Pitch for generation
+    setSelectedModel(model1000);
+
+    const colsCount = Math.round(widthMeters / 0.5);
+    const targetHeightMm = heightMeters * 1000;
+    
+    const rows1000 = Math.floor(targetHeightMm / 1000);
+    const remainder = targetHeightMm % 1000;
+    const has500Row = remainder > 0; 
+
+    const newPanels: PanelInstance[] = [];
+    let currentY = 0;
+    
+    // Build rows 1000mm
+    for (let r = 0; r < rows1000; r++) {
+      for (let c = 0; c < colsCount; c++) {
+        newPanels.push({
+          id: `panel-1000-${r}-${c}-${Date.now()}`,
+          model: model1000,
+          position: { x: c * (model1000.larguraMm / 5), y: currentY }
+        });
+      }
+      currentY += (model1000.alturaMm / 5);
+    }
+
+    // Add bottom row of 500mm if needed
+    if (has500Row) {
+      for (let c = 0; c < colsCount; c++) {
+        newPanels.push({
+          id: `panel-500-${c}-${Date.now()}`,
+          model: model500,
+          position: { x: c * (model500.larguraMm / 5), y: currentY }
         });
       }
     }
+    
     setPanels(newPanels);
   };
 
@@ -87,7 +164,7 @@ export default function Sidebar({ onExportPDF, onExportPNG }: { onExportPDF: () 
   if (isLoading) return <div className="w-80 bg-gray-900 text-white p-4 h-full flex flex-col items-center justify-center">Loading inventory...</div>;
 
   return (
-    <div className="w-96 bg-gray-900 text-gray-100 p-6 h-full flex flex-col gap-6 overflow-y-auto border-r border-gray-800 shadow-xl">
+    <div className="w-[400px] shrink-0 bg-gray-900 text-gray-100 p-6 h-full flex flex-col gap-6 overflow-y-auto border-r border-gray-800 shadow-xl">
       
       {/* Header */}
       <div>
@@ -100,36 +177,94 @@ export default function Sidebar({ onExportPDF, onExportPNG }: { onExportPDF: () 
 
       {/* Model Selection */}
       <div className="space-y-2">
-        <label className="text-sm font-semibold text-gray-300">Modelo do Painel</label>
+        <label className="text-sm font-semibold text-gray-300">Pitch / Tipo do Painel</label>
         <select 
           className="w-full bg-gray-800 border border-gray-700 rounded-md p-2 text-white"
-          value={selectedModel?.modelo || ''}
-          onChange={(e) => setSelectedModel(inventory.find(i => i.modelo === e.target.value) || null)}
+          value={selectedPitch}
+          onChange={(e) => {
+            setSelectedPitch(e.target.value);
+            const mdl = inventory.find(i => i.modelo === e.target.value);
+            if (mdl) setSelectedModel(mdl);
+          }}
         >
-          {inventory.map(item => (
-            <option key={item.modelo} value={item.modelo}>{item.modelo} ({item.resolucaoX}x{item.resolucaoY}px)</option>
+          {uniquePitches.map(pitch => (
+            <option key={pitch} value={pitch}>{pitch}</option>
           ))}
         </select>
       </div>
 
+      {/* Generation Toggles */}
+      <div className="flex bg-gray-800 p-1 rounded-md">
+        <button 
+          onClick={() => setGenerationMode('smart')}
+          className={`flex-1 text-xs py-1.5 rounded transition-colors ${generationMode === 'smart' ? 'bg-blue-600 text-white font-semibold' : 'text-gray-400 hover:text-white'}`}
+        >
+          <Ruler size={14} className="inline mr-1"/> Por Metragem
+        </button>
+        <button 
+          onClick={() => setGenerationMode('uniform')}
+          className={`flex-1 text-xs py-1.5 rounded transition-colors ${generationMode === 'uniform' ? 'bg-blue-600 text-white font-semibold' : 'text-gray-400 hover:text-white'}`}
+        >
+          <GridIcon size={14} className="inline mr-1"/> Grid Fixo
+        </button>
+      </div>
+
       {/* Grid Generator */}
       <div className="bg-gray-800 p-4 rounded-lg border border-gray-700 space-y-4">
-        <div className="flex items-center gap-2 text-gray-200 font-semibold mb-2">
-          <GridIcon size={18} /> Geração Uniforme
-        </div>
-        <div className="flex gap-4">
-          <div className="flex-1">
-            <label className="text-xs text-gray-400">Colunas (Largura)</label>
-            <input type="number" min="1" value={cols} onChange={e => setCols(parseInt(e.target.value))} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 mt-1 text-center" />
-          </div>
-          <div className="flex-1">
-            <label className="text-xs text-gray-400">Linhas (Altura)</label>
-            <input type="number" min="1" value={rows} onChange={e => setRows(parseInt(e.target.value))} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 mt-1 text-center" />
-          </div>
-        </div>
-        <button onClick={generateGrid} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded transition-colors text-sm font-medium">
-          Gerar Grid
-        </button>
+        {generationMode === 'smart' ? (
+          <>
+            <div className="text-gray-300 text-sm mb-2">Geração Inteligente (Mescla 500x500 e 500x1000)</div>
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="text-xs text-gray-400">Largura (metros)</label>
+                <input type="number" step="0.5" min="0.5" value={widthMeters} onChange={e => setWidthMeters(parseFloat(e.target.value))} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 mt-1 text-center" />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-gray-400">Altura (metros)</label>
+                <input type="number" step="0.5" min="0.5" value={heightMeters} onChange={e => setHeightMeters(parseFloat(e.target.value))} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 mt-1 text-center" />
+              </div>
+            </div>
+            <button onClick={generateSmartGrid} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded transition-colors text-sm font-medium">
+              Gerar Painel
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="text-gray-300 text-sm mb-2">Geração Uniforme (apenas o mesmo modelo)</div>
+            
+            <div className="mb-2">
+              <select 
+                className="w-full bg-gray-900 border border-gray-700 rounded-md p-2 text-white text-xs"
+                value={`${selectedModel?.larguraMm}x${selectedModel?.alturaMm}`}
+                onChange={(e) => {
+                  const [w, h] = e.target.value.split('x').map(Number);
+                  const mdl = inventory.find(i => i.modelo === selectedPitch && i.larguraMm === w && i.alturaMm === h);
+                  if (mdl) setSelectedModel(mdl);
+                }}
+              >
+                {inventory.filter(i => i.modelo === selectedPitch).map(item => (
+                  <option key={`${item.larguraMm}x${item.alturaMm}`} value={`${item.larguraMm}x${item.alturaMm}`}>
+                    Usar gabinetes de {item.larguraMm}x{item.alturaMm}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="text-xs text-gray-400">Colunas (Largura)</label>
+                <input type="number" min="1" value={cols} onChange={e => setCols(parseInt(e.target.value))} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 mt-1 text-center" />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-gray-400">Linhas (Altura)</label>
+                <input type="number" min="1" value={rows} onChange={e => setRows(parseInt(e.target.value))} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 mt-1 text-center" />
+              </div>
+            </div>
+            <button onClick={generateUniformGrid} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded transition-colors text-sm font-medium">
+              Gerar Grid
+            </button>
+          </>
+        )}
       </div>
 
       {/* Routing Settings */}
@@ -200,9 +335,9 @@ export default function Sidebar({ onExportPDF, onExportPNG }: { onExportPDF: () 
         
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-gray-800 p-3 rounded border border-gray-700">
-            <div className="text-gray-500 text-xs flex items-center gap-1 mb-1"><Maximize size={12}/> Resolução</div>
-            <div className="font-semibold text-sm">{Math.sqrt((totalWidthMm/1000) * (totalHeightMm/1000) * totalPixels).toFixed(0)}? {panels.length > 0 && selectedModel ? `${(totalWidthMm / selectedModel.larguraMm * selectedModel.resolucaoX).toFixed(0)}x${(totalHeightMm / selectedModel.alturaMm * selectedModel.resolucaoY).toFixed(0)}` : '0x0'} px</div>
-            <div className="text-xs text-gray-400 mt-1">Total: {totalPixels.toLocaleString()} px</div>
+            <div className="text-gray-500 text-xs flex items-center gap-1 mb-1"><Maximize size={12}/> Resolução Total</div>
+            <div className="font-semibold text-sm">{totalPixels.toLocaleString()} px</div>
+            {routingResult && <div className="text-xs text-green-400 mt-1">{routingResult.totalPorts} Porta(s) Usadas</div>}
           </div>
           
           <div className="bg-gray-800 p-3 rounded border border-gray-700">

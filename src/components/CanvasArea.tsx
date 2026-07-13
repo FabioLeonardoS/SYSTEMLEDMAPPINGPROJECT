@@ -87,8 +87,8 @@ export default function CanvasArea({ stageRef }: { stageRef: React.RefObject<any
                 onDragEnd={(e) => handleDragEnd(e, panel.id)}
               >
                 <Rect
-                  width={BLOCK_SIZE}
-                  height={BLOCK_SIZE}
+                  width={panel.model.larguraMm / 5}
+                  height={panel.model.alturaMm / 5}
                   fill={portColor}
                   opacity={0.8}
                   stroke="#111827"
@@ -114,7 +114,7 @@ export default function CanvasArea({ stageRef }: { stageRef: React.RefObject<any
                 />
                 <Text
                   x={5}
-                  y={BLOCK_SIZE - 20}
+                  y={(panel.model.alturaMm / 5) - 20}
                   text={`${panel.model.resolucaoX}x${panel.model.resolucaoY}`}
                   fontSize={10}
                   fill="rgba(255,255,255,0.5)"
@@ -126,12 +126,16 @@ export default function CanvasArea({ stageRef }: { stageRef: React.RefObject<any
           {/* Routing Lines */}
           {routingResult?.connections.map((conn, idx) => {
             const portColor = PORT_COLORS[(conn.portId - 1) % PORT_COLORS.length];
+            const fromW = conn.from.model.larguraMm / 5;
+            const fromH = conn.from.model.alturaMm / 5;
+            const toW = conn.to.model.larguraMm / 5;
+            const toH = conn.to.model.alturaMm / 5;
             // Connect centers of blocks
             const points = [
-              conn.from.position.x + BLOCK_SIZE / 2,
-              conn.from.position.y + BLOCK_SIZE / 2,
-              conn.to.position.x + BLOCK_SIZE / 2,
-              conn.to.position.y + BLOCK_SIZE / 2,
+              conn.from.position.x + fromW / 2,
+              conn.from.position.y + fromH / 2,
+              conn.to.position.x + toW / 2,
+              conn.to.position.y + toH / 2,
             ];
 
             return (
