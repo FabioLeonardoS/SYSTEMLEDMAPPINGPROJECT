@@ -121,7 +121,7 @@ export default function Sidebar({ onExportPDF }: { onExportPDF: () => void }) {
   if (routeOptions.processorConfig?.sendCardPorts === 16) sendCardModelToUse = 'H-16XRj45';
   else if (routeOptions.processorConfig?.sendCardPorts === 32) sendCardModelToUse = 'H-32_Standard';
   
-  const sendCardCalc = totalWidthPx > 0 ? calculateSendCards(totalWidthPx, totalHeightPx, sendCardModelToUse, 8) : null;
+  const sendCardCalc = calculateSendCards(totalWidthPx, totalHeightPx, sendCardModelToUse, 8);
 
   const generateUniformGrid = () => {
     if (!selectedModel) return;
