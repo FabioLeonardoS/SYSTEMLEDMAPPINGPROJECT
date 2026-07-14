@@ -237,7 +237,7 @@ export default function Sidebar({ onExportPDF }: { onExportPDF: () => void }) {
   if (isLoading) return <div className="w-80 bg-gray-900 text-white p-4 h-full flex flex-col items-center justify-center">Loading inventory...</div>;
 
   return (
-    <div className="w-[400px] shrink-0 bg-gray-900 text-gray-100 p-6 h-full flex flex-col gap-6 overflow-y-auto border-r border-gray-800 shadow-xl">
+    <div className="w-full md:w-[400px] shrink-0 bg-gray-900 text-gray-100 p-6 h-full flex flex-col gap-6 overflow-y-auto border-r border-gray-800 shadow-xl relative z-10">
       
       {/* Header */}
       <div>

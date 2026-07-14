@@ -92,7 +92,7 @@ export default function CanvasArea({ stageRef }: { stageRef: React.RefObject<any
   };
 
   return (
-    <div className="flex-1 bg-gray-950 overflow-hidden relative" ref={containerRef}>
+    <div className="absolute inset-0 opacity-0 pointer-events-none md:relative md:opacity-100 md:pointer-events-auto md:flex-1 bg-gray-950 overflow-hidden" ref={containerRef}>
       <Stage 
         width={stageSize.width} 
         height={stageSize.height} 

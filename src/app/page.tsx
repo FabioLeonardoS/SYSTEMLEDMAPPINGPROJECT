@@ -22,7 +22,7 @@ export default function Home() {
   };
 
   return (
-    <main className="flex h-screen w-full bg-black overflow-hidden font-sans">
+    <main className="flex h-screen w-full bg-black overflow-hidden font-sans relative">
       <Sidebar onExportPDF={handleExportPDF} />
       <CanvasArea stageRef={stageRef} />
     </main>
